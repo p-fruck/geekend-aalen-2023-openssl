@@ -28,7 +28,8 @@ For cryptographic recommendations, I rely on the NIST and BSI
 - Generating your own certificate
 - Creating a CA infrastructure
 - Validating certificates using a certificate chain
-- Securly serving content using TLS encryption
+- Setting up a server with TLS encryption
+- Connecting to the server and establishing system trust
 
 ---
 
@@ -93,7 +94,7 @@ bash -il
 
 ```bash
 openssl req -new -x509 -nodes -days $((10*365)) \
-   -subj "/CN=ca.my.domain" \
+   -subj "/CN=ca,O=myorg" \
    -key certs/ca.key.pem \
    -out certs/ca.crt.pem
 ```
@@ -104,8 +105,122 @@ bash -il
 
 ---
 
+## Generating a CSR
+
+```bash
+openssl req -new -newkey ed25519 -nodes \
+  -subj "/CN=localhost,O=myorg" \
+  -addext "subjectAltName=DNS:localhost,DNS:127.0.0.1" \
+  -keyout certs/localhost.key.pem \
+  -out certs/localhost.csr.pem
+```
+
+- Difference between **subject** and **subject alt name** (SAN)
+  - **Subject** is a DN that identifies the entity (RFC5280)[^3]
+  - **SAN** contains a list of DNS records (or IPs) for the certificate
+
+```terminal8
+bash -il
+```
+
+---
+
+## Create a certificate from CSR using CA
+
+```bash
+openssl x509 -req -days 365 -set_serial 01 \
+  -in certs/localhost.csr.pem \
+  -out certs/localhost.crt.pem \
+  -copy_extensions copy \
+  -CA certs/ca.crt.pem \
+  -CAkey certs/ca.key.pem
+```
+
+- Adding SAN extension is mandatory when using x509 cert for TLS
+- `-copy_extension` copies **SAN** extension from CSR to CA cert
+- `-set_serial` is **BAD**. This is only for demonstration purposes
+
+```terminal8
+bash -il
+```
+
+## Keeping track of serials
+
+- Serial number must be unique for each issuer
+- CA must keep track of serial number using serial file
+- Use the `-CAserial` or `-CAcreateserial` flag
+  - `-CAcreateserial` also increments the number in an existing serial file
+
+---
+
+## Creating a chain and verifying the certificate
+
+- Certificate chains are created by concatenating certificates
+  - Order from "lowest" to "highest", e.g. CA cert always comes last
+  - `cat certs/localhost.crt.pem certs/ca.crt.pem > certs/localhost.chain.pem`
+- Verify the _leaf_ and _chain_ certificate:
+  ```bash
+  openssl verify -CAfile certs/ca.crt.pem \
+    certs/localhost.chain.pem \
+    certs/localhost.crt.pem
+  ```
+
+```terminal8
+bash -il
+```
+
+---
+
+## Inspecting certificates
+
+- Certificates can be inspected using the `openssl x509` command
+  - `openssl x509 -in certs/localhost.crt.pem -noout -text`
+
+```terminal16
+bash -il
+```
+
+---
+
+## Spawning a server
+
+- OpenSSL provides `s_server` component
+  - Server with TLS encryption using the generated certs
+  - Listens on `*:4433` by default
+  
+```bash
+openssl s_server \
+  -cert_chain certs/localhost.chain.pem \
+  -cert certs/localhost.crt.pem \
+  -key certs/localhost.key.pem
+```
+
+```terminal8
+bash -il
+```
+
+---
+
+## Connecting to the server
+
+- Using `curl [--cacert <certfile>]`
+- Using `openssl s_client <host>:<port>` 
+- Establish system-wide trust for CA
+  - Copy CA cert to `/etc/pki/ca-trust/source/anchors/` (RHEL)
+  - `sudo update-ca-trust`
+
+```terminal14
+bash -il
+```
+
+---
+
 ## Sources
 
 [^1] https://web.archive.org/web/20090117023500/http://www.nsa.gov/business/programs/elliptic_curve.shtml
 
 [^2] https://blog.cr.yp.to/20140323-ecdsa.html
+
+[^3] https://www.rfc-editor.org/rfc/rfc5280#section-4.1.2.6
+
+See README.md for more literature

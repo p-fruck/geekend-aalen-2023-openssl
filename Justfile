@@ -1,2 +1,2 @@
-@live:
-    lookatme slides.md -e terminal --live
+@lookatme:
+    lookatme slides.md -e terminal
