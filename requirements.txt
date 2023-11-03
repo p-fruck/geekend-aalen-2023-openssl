@@ -1,0 +1,9 @@
+setuptools
+marshmallow>=3.17.0,<4
+Click>=7,<9
+PyYAML==6.0.1
+markdown-it-py[linkify,plugins]
+python-dateutil>=2.0,<3.0
+mistune>=0.8,<1
+urwid>=2,<3
+Pygments>=2,<3
